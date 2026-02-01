@@ -1,6 +1,9 @@
 pipeline {
     agent any
 
+    tools {
+        nodejs 'node18'
+    }
     environment {
         // Set the credentials ID you added in Jenkins for Git
         GIT_CREDENTIALS = "f67a3a6b-1584-4061-ab57-80c7eac0fc6d"
@@ -12,8 +15,9 @@ pipeline {
     stages {
 
      stage('Install & Build App') {
-            steps {
-                // Install dependencies and build React
+            steps {                
+				sh 'node -v'
+                sh 'npm -v'
                 sh 'npm install'
                 sh 'npm run build'
             }
