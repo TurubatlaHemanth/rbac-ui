@@ -1,18 +1,18 @@
 pipeline {
-    agent {
-        docker {
-            // Node + npm for build
-            image 'node:18'
-            // Mount Docker socket to build Docker images
-            args '-v /var/run/docker.sock:/var/run/docker.sock'
-        }
+    agent any
+
+    tools {
+        // NodeJS tool installed via NodeJS Plugin
+        nodejs 'node18'  // Make sure this matches the name in Jenkins Global Tool Config
     }
 
     environment {
+        // Git credentials stored in Jenkins
+        GIT_CREDENTIALS = "f67a3a6b-1584-4061-ab57-80c7eac0fc6d"
         // Kubernetes namespace
         KUBE_NAMESPACE = "deployments"
-        // Git credentials (if needed)
-        GIT_CREDENTIALS = "f67a3a6b-1584-4061-ab57-80c7eac0fc6d"
+        // Docker image name
+        DOCKER_IMAGE = "react-app"
     }
 
     stages {
@@ -20,7 +20,7 @@ pipeline {
         stage('Checkout Source') {
             steps {
                 git(
-                    branch: '002-JenkinsFileTesting',  // replace with your branch
+                    branch: '002-JenkinsFileTesting', // Replace with your branch
                     url: 'https://github.com/TurubatlaHemanth/rbac-ui.git',
                     credentialsId: env.GIT_CREDENTIALS
                 )
@@ -29,6 +29,7 @@ pipeline {
 
         stage('Install & Build App') {
             steps {
+                echo "Building NodeJS application..."
                 sh 'node -v'
                 sh 'npm -v'
                 sh 'npm install'
@@ -38,22 +39,23 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                sh "docker build -t react-app:${BUILD_ID} ."
+                echo "Building Docker image..."
+                sh """
+                    docker build -t ${DOCKER_IMAGE}:${BUILD_ID} .
+                    docker images | grep ${DOCKER_IMAGE}
+                """
             }
         }
 
         stage('Deploy to Kubernetes') {
-            agent {
-                docker {
-                    // Kubectl container for deployment
-                    image 'bitnami/kubectl:latest'
-                    args '-v $HOME/.kube:/root/.kube' // mount kubeconfig
-                }
-            }
             steps {
+                echo "Deploying to Kubernetes namespace ${KUBE_NAMESPACE}..."
+                // Update deployment.yaml image
                 sh """
-                    sed -i 's|image: .*|image: react-app:${BUILD_ID}|g' k8s/deployment.yaml
+                    sed -i 's|image: .*|image: ${DOCKER_IMAGE}:${BUILD_ID}|g' k8s/deployment.yaml
                 """
+
+                // Apply manifests
                 sh "kubectl apply -f k8s/deployment.yaml -n ${KUBE_NAMESPACE}"
                 sh "kubectl apply -f k8s/service.yaml -n ${KUBE_NAMESPACE}"
             }
@@ -62,10 +64,10 @@ pipeline {
 
     post {
         success {
-            echo "Application built and deployed to Kubernetes successfully!"
+            echo "✅ Application built and deployed to Kubernetes successfully!"
         }
         failure {
-            echo "Build or deploy failed. See logs above."
+            echo "❌ Build or deploy failed. Check the logs above."
         }
     }
 }
