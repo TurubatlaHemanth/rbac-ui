@@ -11,17 +11,7 @@ pipeline {
 
     stages {
 
-        stage('Checkout Source') {
-            steps {
-                // Checkout the repository using stored Git credentials
-                git(
-                  url: 'https://github.com/TurubatlaHemanth/rbac-ui.git',
-                  credentialsId: env.GIT_CREDENTIALS
-                )
-            }
-        }
-
-        stage('Install & Build App') {
+     stage('Install & Build App') {
             steps {
                 // Install dependencies and build React
                 sh 'npm install'
