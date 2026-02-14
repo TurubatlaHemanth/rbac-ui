@@ -1,14 +1,15 @@
 pipeline {
     agent any
 
-    tools {
-        nodejs 'node18'
-    }
+tools {
+    nodejs 'node22'
+}
 
     environment {
         GIT_CREDENTIALS = "f67a3a6b-1584-4061-ab57-80c7eac0fc6d"
         KUBE_NAMESPACE = "deployments"
         DOCKER_IMAGE = "react-app"
+		KUBECONFIG      = "/home/hturubatla/.kube/config"
     }
 
     stages {
