@@ -2,8 +2,7 @@ pipeline {
     agent any
 
     tools {
-        // NodeJS tool installed via NodeJS Plugin
-        nodejs 'node18'  // Make sure this matches the name in Jenkins Global Tool Config
+        nodejs 'node18'
     }
 
     environment {
@@ -19,59 +18,83 @@ pipeline {
 
         stage('Checkout Source') {
             steps {
+                echo "========== CHECKOUT STAGE =========="
+                sh 'pwd'
+                sh 'ls -la'
+
                 git(
-                    branch: '002-JenkinsFileTesting', // Replace with your branch
+				    branch: '002-JenkinsFileTesting', // Replace with your branch
                     url: 'https://github.com/TurubatlaHemanth/rbac-ui.git',
                     credentialsId: env.GIT_CREDENTIALS
                 )
+
+                echo "Checkout completed"
+                sh 'ls -la'
             }
         }
 
         stage('Install & Build App') {
             steps {
-                echo "Building NodeJS application..."
+                echo "========== BUILD NODE APP =========="
                 sh 'node -v'
                 sh 'npm -v'
+
                 sh 'npm install'
                 sh 'npm run build'
-            }
-        }
-		
-		echo "Building Docker Image"
-		
-        stage('Build Docker Image') {
-            steps {
-                echo "Building Docker image..."
-                sh """
-                    docker build -t ${DOCKER_IMAGE}:${BUILD_ID} .
-                    docker images | grep ${DOCKER_IMAGE}
-                """
+
+                echo "Node build completed"
+                sh 'ls -la'
             }
         }
 
-		echo "Deploying to Kubernetes...!"
+        stage('Build Docker Image') {
+            steps {
+                echo "========== DOCKER BUILD =========="
+                sh 'docker version'
+                sh 'docker info || true'
+
+                sh """
+                    docker build -t ${DOCKER_IMAGE}:${BUILD_ID} .
+                """
+
+                echo "Docker image built successfully"
+                sh "docker images | grep ${DOCKER_IMAGE}"
+            }
+        }
 
         stage('Deploy to Kubernetes') {
             steps {
-                echo "Deploying to Kubernetes namespace ${KUBE_NAMESPACE}..."
-                // Update deployment.yaml image
+                echo "========== KUBERNETES DEPLOY =========="
+                sh 'kubectl version --client'
+                sh "kubectl get ns || true"
+
+                echo "Updating deployment.yaml image..."
                 sh """
                     sed -i 's|image: .*|image: ${DOCKER_IMAGE}:${BUILD_ID}|g' k8s/deployment.yaml
                 """
 
-                // Apply manifests
+                echo "Updated deployment.yaml:"
+                sh "cat k8s/deployment.yaml"
+
+                echo "Applying Kubernetes manifests..."
                 sh "kubectl apply -f k8s/deployment.yaml -n ${KUBE_NAMESPACE}"
                 sh "kubectl apply -f k8s/service.yaml -n ${KUBE_NAMESPACE}"
+
+                echo "Checking pod status..."
+                sh "kubectl get pods -n ${KUBE_NAMESPACE}"
             }
         }
     }
 
     post {
         success {
-            echo "✅ Application built and deployed to Kubernetes successfully!"
+            echo "✅ Application built and deployed successfully!"
         }
         failure {
-            echo "❌ Build or deploy failed. Check the logs above."
+            echo "❌ Build or deploy failed."
+            echo "========== DEBUG INFO =========="
+            sh 'docker images || true'
+            sh "kubectl get pods -n ${KUBE_NAMESPACE} || true"
         }
     }
 }
