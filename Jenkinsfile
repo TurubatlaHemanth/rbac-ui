@@ -6,11 +6,8 @@ pipeline {
     }
 
     environment {
-        // Git credentials stored in Jenkins
         GIT_CREDENTIALS = "f67a3a6b-1584-4061-ab57-80c7eac0fc6d"
-        // Kubernetes namespace
         KUBE_NAMESPACE = "deployments"
-        // Docker image name
         DOCKER_IMAGE = "react-app"
     }
 
@@ -23,7 +20,7 @@ pipeline {
                 sh 'ls -la'
 
                 git(
-				    branch: '002-JenkinsFileTesting', // Replace with your branch
+                    branch: '002-JenkinsFileTesting',
                     url: 'https://github.com/TurubatlaHemanth/rbac-ui.git',
                     credentialsId: env.GIT_CREDENTIALS
                 )
@@ -38,50 +35,66 @@ pipeline {
                 echo "========== BUILD NODE APP =========="
                 sh 'node -v'
                 sh 'npm -v'
-
                 sh 'npm install'
                 sh 'npm run build'
 
                 echo "Node build completed"
-                sh 'ls -la'
             }
         }
 
-        stage('Build Docker Image') {
+        stage('Start Minikube') {
             steps {
-                echo "========== DOCKER BUILD =========="
-                sh 'docker version'
-                sh 'docker info || true'
+                echo "========== CHECKING MINIKUBE =========="
+                sh '''
+                    minikube status | grep Running || minikube start --driver=docker
+                '''
 
-                sh """
+                echo "========== VERIFY CLUSTER =========="
+                sh '''
+                    kubectl config use-context minikube
+                    kubectl get nodes
+                '''
+            }
+        }
+
+        stage('Ensure Namespace Exists') {
+            steps {
+                echo "========== CHECKING NAMESPACE =========="
+                sh '''
+                    kubectl get namespace ${KUBE_NAMESPACE} || kubectl create namespace ${KUBE_NAMESPACE}
+                '''
+            }
+        }
+
+        stage('Build Docker Image Inside Minikube') {
+            steps {
+                echo "========== BUILDING IMAGE INSIDE MINIKUBE =========="
+                sh '''
+                    eval $(minikube docker-env)
                     docker build -t ${DOCKER_IMAGE}:${BUILD_ID} .
-                """
-
-                echo "Docker image built successfully"
-                sh "docker images | grep ${DOCKER_IMAGE}"
+                    docker images | grep ${DOCKER_IMAGE}
+                '''
             }
         }
 
         stage('Deploy to Kubernetes') {
             steps {
-                echo "========== KUBERNETES DEPLOY =========="
-                sh 'kubectl version --client'
-                sh "kubectl get ns || true"
-
-                echo "Updating deployment.yaml image..."
+                echo "========== UPDATING IMAGE IN DEPLOYMENT YAML =========="
                 sh """
                     sed -i 's|image: .*|image: ${DOCKER_IMAGE}:${BUILD_ID}|g' k8s/deployment.yaml
                 """
 
-                echo "Updated deployment.yaml:"
-                sh "cat k8s/deployment.yaml"
+                echo "========== APPLYING MANIFESTS =========="
+                sh """
+                    kubectl apply -f k8s/deployment.yaml -n ${KUBE_NAMESPACE}
+                    kubectl apply -f k8s/service.yaml -n ${KUBE_NAMESPACE}
+                """
 
-                echo "Applying Kubernetes manifests..."
-                sh "kubectl apply -f k8s/deployment.yaml -n ${KUBE_NAMESPACE}"
-                sh "kubectl apply -f k8s/service.yaml -n ${KUBE_NAMESPACE}"
-
-                echo "Checking pod status..."
-                sh "kubectl get pods -n ${KUBE_NAMESPACE}"
+                echo "========== VERIFYING DEPLOYMENT =========="
+                sh """
+                    kubectl get pods -n ${KUBE_NAMESPACE}
+                    kubectl get svc -n ${KUBE_NAMESPACE}
+                """
             }
         }
     }
@@ -95,6 +108,7 @@ pipeline {
             echo "========== DEBUG INFO =========="
             sh 'docker images || true'
             sh "kubectl get pods -n ${KUBE_NAMESPACE} || true"
+            sh "kubectl describe pods -n ${KUBE_NAMESPACE} || true"
         }
     }
 }

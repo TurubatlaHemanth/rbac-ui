@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rbac
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rbac
+  template:
+    metadata:
+      labels:
+        app: rbac
+    spec:
+      containers:
+        - name: rbac
+          image: rbac:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3000
