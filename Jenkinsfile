@@ -28,7 +28,9 @@ pipeline {
                 sh 'npm run build'
             }
         }
-
+		
+		echo "Building Docker Image"
+		
         stage('Build Docker Image') {
             steps {
                 script {
@@ -36,6 +38,8 @@ pipeline {
                 }
             }
         }
+
+		echo "Deploying to Kubernetes...!"
 
         stage('Deploy to Kubernetes') {
             steps {
