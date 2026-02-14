@@ -1,29 +1,37 @@
 pipeline {
     agent any
 
-    environment {
-        // Set the credentials ID you added in Jenkins for Git
-        GIT_CREDENTIALS = "f67a3a6b-1584-4061-ab57-80c7eac0fc6d"
+    tools {
+        // NodeJS tool installed via NodeJS Plugin
+        nodejs 'node18'  // Make sure this matches the name in Jenkins Global Tool Config
+    }
 
-        // Optional: Set Kubernetes namespace (default if blank)
+    environment {
+        // Git credentials stored in Jenkins
+        GIT_CREDENTIALS = "f67a3a6b-1584-4061-ab57-80c7eac0fc6d"
+        // Kubernetes namespace
         KUBE_NAMESPACE = "deployments"
+        // Docker image name
+        DOCKER_IMAGE = "react-app"
     }
 
     stages {
 
         stage('Checkout Source') {
             steps {
-                // Checkout the repository using stored Git credentials
                 git(
-                  url: 'https://github.com/TurubatlaHemanth/rbac-ui.git',
-                  credentialsId: env.GIT_CREDENTIALS
+                    branch: '002-JenkinsFileTesting', // Replace with your branch
+                    url: 'https://github.com/TurubatlaHemanth/rbac-ui.git',
+                    credentialsId: env.GIT_CREDENTIALS
                 )
             }
         }
 
         stage('Install & Build App') {
             steps {
-                // Install dependencies and build React
+                echo "Building NodeJS application..."
+                sh 'node -v'
+                sh 'npm -v'
                 sh 'npm install'
                 sh 'npm run build'
             }
@@ -33,9 +41,11 @@ pipeline {
 		
         stage('Build Docker Image') {
             steps {
-                script {
-                    sh 'docker build -t react-app:${BUILD_ID} .'
-                }
+                echo "Building Docker image..."
+                sh """
+                    docker build -t ${DOCKER_IMAGE}:${BUILD_ID} .
+                    docker images | grep ${DOCKER_IMAGE}
+                """
             }
         }
 
@@ -43,24 +53,25 @@ pipeline {
 
         stage('Deploy to Kubernetes') {
             steps {
-                script {
-                    sh """
-                        sed -i 's|image: .*|image: react-app:${BUILD_ID}|g' k8s/deployment.yaml
-                    """
-					
-                    sh "kubectl apply -f k8s/deployment.yaml -n ${KUBE_NAMESPACE}"
-                    sh "kubectl apply -f k8s/service.yaml -n ${KUBE_NAMESPACE}"
-                }
+                echo "Deploying to Kubernetes namespace ${KUBE_NAMESPACE}..."
+                // Update deployment.yaml image
+                sh """
+                    sed -i 's|image: .*|image: ${DOCKER_IMAGE}:${BUILD_ID}|g' k8s/deployment.yaml
+                """
+
+                // Apply manifests
+                sh "kubectl apply -f k8s/deployment.yaml -n ${KUBE_NAMESPACE}"
+                sh "kubectl apply -f k8s/service.yaml -n ${KUBE_NAMESPACE}"
             }
         }
     }
 
     post {
         success {
-            echo "Application built and deployed to Kubernetes successfully!"
+            echo "✅ Application built and deployed to Kubernetes successfully!"
         }
         failure {
-            echo "Build or deploy failed. See logs above."
+            echo "❌ Build or deploy failed. Check the logs above."
         }
     }
 }
