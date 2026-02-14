@@ -45,8 +45,11 @@ pipeline {
         stage('Start Minikube') {
             steps {
                 echo "========== CHECKING MINIKUBE =========="
+                // FIXED: more reliable check for running host
                 sh '''
-                    minikube status | grep Running || minikube start --driver=docker
+                    if ! minikube status | grep -q "host: Running"; then
+                        minikube start --driver=docker
+                    fi
                 '''
 
                 echo "========== VERIFY CLUSTER =========="
@@ -69,9 +72,10 @@ pipeline {
         stage('Build Docker Image Inside Minikube') {
             steps {
                 echo "========== BUILDING IMAGE INSIDE MINIKUBE =========="
+                // FIXED: ensure BUILD_ID exists or fallback to BUILD_NUMBER
                 sh '''
                     eval $(minikube docker-env)
-                    docker build -t ${DOCKER_IMAGE}:${BUILD_ID} .
+                    docker build -t ${DOCKER_IMAGE}:${BUILD_ID:-${BUILD_NUMBER}} .
                     docker images | grep ${DOCKER_IMAGE}
                 '''
             }
@@ -80,8 +84,9 @@ pipeline {
         stage('Deploy to Kubernetes') {
             steps {
                 echo "========== UPDATING IMAGE IN DEPLOYMENT YAML =========="
+                // FIXED: safer alternative using kubectl set image instead of sed
                 sh """
-                    sed -i 's|image: .*|image: ${DOCKER_IMAGE}:${BUILD_ID}|g' k8s/deployment.yaml
+                    kubectl set image deployment/rbac rbac=${DOCKER_IMAGE}:${BUILD_ID:-${BUILD_NUMBER}} -n ${KUBE_NAMESPACE} || echo "Deployment not found, applying YAML..."
                 """
 
                 echo "========== APPLYING MANIFESTS =========="
